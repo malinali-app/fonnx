@@ -31,10 +31,7 @@ void cleanupOrtSession(OrtSessionObjects? ortSessionObjects) {
   // _Maybe_ Whisper. Definitely not an LLM.
 }
 
-enum OnnxIsolateType {
-  miniLm,
-  minishLab,
-}
+enum OnnxIsolateType { miniLm, minishLab }
 
 class OnnxIsolateManager {
   SendPort? _sendPort;
@@ -97,7 +94,9 @@ class OnnxIsolateManager {
     } else if (result is Error) {
       throw result;
     } else {
-      throw Exception('Unknown error occurred in the ONNX isolate. Result: $result');
+      throw Exception(
+        'Unknown error occurred in the ONNX isolate. Result: $result',
+      );
     }
   }
 
@@ -126,8 +125,10 @@ void ortMiniLmIsolateEntryPoint(SendPort mainSendPort) {
         // Lazily create the Ort session if it's not already done.
         ortSessionObjects ??= createOrtSession(message.modelPath);
         // Perform the inference here using ortSessionObjects and message.tokens, retrieve result.
-        final result =
-            await _getMiniLmEmbeddingFfi(ortSessionObjects!, message.tokens);
+        final result = await _getMiniLmEmbeddingFfi(
+          ortSessionObjects!,
+          message.tokens,
+        );
         message.replyPort.send(result);
       } catch (e) {
         // Send the error message back to the main isolate.
@@ -147,7 +148,9 @@ void ortMiniLmIsolateEntryPoint(SendPort mainSendPort) {
 }
 
 Future<Float32List> _getMiniLmEmbeddingFfi(
-    OrtSessionObjects session, List<int> tokens) async {
+  OrtSessionObjects session,
+  List<int> tokens,
+) async {
   final memoryInfo = calloc<Pointer<OrtMemoryInfo>>();
   session.api.createCpuMemoryInfo(memoryInfo);
   final inputIdsValue = calloc<Pointer<OrtValue>>();
@@ -182,7 +185,7 @@ Future<Float32List> _getMiniLmEmbeddingFfi(
   inputValues[2] = inputMaskValue.value;
 
   final outputNamesPointer = calloc<Pointer<Char>>();
-  final embeddingsName = 'embeddings'.toNativeUtf8();
+  final embeddingsName = 'sentence_embedding'.toNativeUtf8();
   outputNamesPointer[0] = embeddingsName.cast();
 
   final outputValuesPtr = calloc<Pointer<OrtValue>>();
@@ -259,8 +262,10 @@ void ortMinishLabIsolateEntryPoint(SendPort mainSendPort) {
         // Lazily create the Ort session if it's not already done.
         ortSessionObjects ??= createOrtSession(message.modelPath);
         // Perform the inference here using ortSessionObjects and message.tokens, retrieve result.
-        final result =
-            await _getMinishLabEmbeddingFfi(ortSessionObjects!, message.tokens);
+        final result = await _getMinishLabEmbeddingFfi(
+          ortSessionObjects!,
+          message.tokens,
+        );
         message.replyPort.send(result);
       } catch (e) {
         // Send the error message back to the main isolate.
@@ -273,14 +278,20 @@ void ortMinishLabIsolateEntryPoint(SendPort mainSendPort) {
       }
       Isolate.exit();
     } else {
-      debugPrint('Unknown message received in the ONNX isolate. Message: $message');
-      throw Exception('Unknown message received in the ONNX isolate. Message: $message');
+      debugPrint(
+        'Unknown message received in the ONNX isolate. Message: $message',
+      );
+      throw Exception(
+        'Unknown message received in the ONNX isolate. Message: $message',
+      );
     }
   });
 }
 
 Future<Float32List> _getMinishLabEmbeddingFfi(
-    OrtSessionObjects session, List<int> tokens) async {
+  OrtSessionObjects session,
+  List<int> tokens,
+) async {
   final memoryInfo = calloc<Pointer<OrtMemoryInfo>>();
   session.api.createCpuMemoryInfo(memoryInfo);
   final inputIdsValue = calloc<Pointer<OrtValue>>();
@@ -292,8 +303,11 @@ Future<Float32List> _getMinishLabEmbeddingFfi(
     shape: [tokens.length],
   );
   final inputMaskValue = calloc<Pointer<OrtValue>>();
-  final attentionMaskValues =
-      List.generate(tokens.length, (index) => 1, growable: false);
+  final attentionMaskValues = List.generate(
+    tokens.length,
+    (index) => 1,
+    growable: false,
+  );
   session.api.createInt64Tensor(
     inputMaskValue,
     memoryInfo: memoryInfo.value,
@@ -323,7 +337,7 @@ Future<Float32List> _getMinishLabEmbeddingFfi(
   // inputValues[2] = inputMaskValue.value;
 
   final outputNamesPointer = calloc<Pointer<Char>>();
-  final embeddingsName = 'embeddings'.toNativeUtf8();
+  final embeddingsName = 'sentence_embedding'.toNativeUtf8();
   outputNamesPointer[0] = embeddingsName.cast();
 
   final outputValuesPtr = calloc<Pointer<OrtValue>>();
