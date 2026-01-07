@@ -185,7 +185,7 @@ Future<Float32List> _getMiniLmEmbeddingFfi(
   inputValues[2] = inputMaskValue.value;
 
   final outputNamesPointer = calloc<Pointer<Char>>();
-  final embeddingsName = 'sentence_embedding'.toNativeUtf8();
+  final embeddingsName = 'last_hidden_state'.toNativeUtf8();
   outputNamesPointer[0] = embeddingsName.cast();
 
   final outputValuesPtr = calloc<Pointer<OrtValue>>();
@@ -337,7 +337,7 @@ Future<Float32List> _getMinishLabEmbeddingFfi(
   // inputValues[2] = inputMaskValue.value;
 
   final outputNamesPointer = calloc<Pointer<Char>>();
-  final embeddingsName = 'sentence_embedding'.toNativeUtf8();
+  final embeddingsName = 'last_hidden_state'.toNativeUtf8();
   outputNamesPointer[0] = embeddingsName.cast();
 
   final outputValuesPtr = calloc<Pointer<OrtValue>>();
