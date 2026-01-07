@@ -13,12 +13,14 @@ class OnnxIsolateMessage {
   final String modelPath;
   final String? ortDylibPathOverride;
   final List<int> tokens;
+  final String? outputName; // Optional: allows client to specify output name
 
   OnnxIsolateMessage({
     required this.replyPort,
     required this.modelPath,
     required this.tokens,
     this.ortDylibPathOverride,
+    this.outputName,
   });
 }
 
@@ -76,6 +78,7 @@ class OnnxIsolateManager {
     String modelPath,
     List<int> tokens, {
     String? ortDylibPathOverride,
+    String? outputName, // Optional: specify model output name (e.g., 'embeddings', 'sentence_embedding', 'last_hidden_state')
   }) async {
     final response = ReceivePort();
     final message = OnnxIsolateMessage(
@@ -83,6 +86,7 @@ class OnnxIsolateManager {
       modelPath: modelPath,
       tokens: tokens,
       ortDylibPathOverride: ortDylibPathOverride,
+      outputName: outputName,
     );
 
     _sendPort!.send(message);
@@ -128,6 +132,7 @@ void ortMiniLmIsolateEntryPoint(SendPort mainSendPort) {
         final result = await _getMiniLmEmbeddingFfi(
           ortSessionObjects!,
           message.tokens,
+          outputName: message.outputName,
         );
         message.replyPort.send(result);
       } catch (e) {
@@ -149,8 +154,9 @@ void ortMiniLmIsolateEntryPoint(SendPort mainSendPort) {
 
 Future<Float32List> _getMiniLmEmbeddingFfi(
   OrtSessionObjects session,
-  List<int> tokens,
-) async {
+  List<int> tokens, {
+  String? outputName,
+}) async {
   final memoryInfo = calloc<Pointer<OrtMemoryInfo>>();
   session.api.createCpuMemoryInfo(memoryInfo);
   final inputIdsValue = calloc<Pointer<OrtValue>>();
@@ -185,7 +191,8 @@ Future<Float32List> _getMiniLmEmbeddingFfi(
   inputValues[2] = inputMaskValue.value;
 
   final outputNamesPointer = calloc<Pointer<Char>>();
-  final embeddingsName = 'last_hidden_state'.toNativeUtf8();
+  // Use provided output name, or default to 'last_hidden_state' for backward compatibility
+  final embeddingsName = (outputName ?? 'last_hidden_state').toNativeUtf8();
   outputNamesPointer[0] = embeddingsName.cast();
 
   final outputValuesPtr = calloc<Pointer<OrtValue>>();
@@ -265,6 +272,7 @@ void ortMinishLabIsolateEntryPoint(SendPort mainSendPort) {
         final result = await _getMinishLabEmbeddingFfi(
           ortSessionObjects!,
           message.tokens,
+          outputName: message.outputName,
         );
         message.replyPort.send(result);
       } catch (e) {
@@ -290,8 +298,9 @@ void ortMinishLabIsolateEntryPoint(SendPort mainSendPort) {
 
 Future<Float32List> _getMinishLabEmbeddingFfi(
   OrtSessionObjects session,
-  List<int> tokens,
-) async {
+  List<int> tokens, {
+  String? outputName,
+}) async {
   final memoryInfo = calloc<Pointer<OrtMemoryInfo>>();
   session.api.createCpuMemoryInfo(memoryInfo);
   final inputIdsValue = calloc<Pointer<OrtValue>>();
@@ -337,7 +346,8 @@ Future<Float32List> _getMinishLabEmbeddingFfi(
   // inputValues[2] = inputMaskValue.value;
 
   final outputNamesPointer = calloc<Pointer<Char>>();
-  final embeddingsName = 'last_hidden_state'.toNativeUtf8();
+  // Use provided output name, or default to 'last_hidden_state' for backward compatibility
+  final embeddingsName = (outputName ?? 'last_hidden_state').toNativeUtf8();
   outputNamesPointer[0] = embeddingsName.cast();
 
   final outputValuesPtr = calloc<Pointer<OrtValue>>();
