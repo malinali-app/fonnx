@@ -1,12 +1,14 @@
 import 'dart:isolate';
 import 'dart:async';
 import 'dart:ffi';
+import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:fonnx/dylib_path_overrides.dart';
 import 'package:fonnx/onnx/ort_ffi_bindings.dart' hide calloc, free;
 import 'package:fonnx/onnx/ort.dart';
+import 'package:fonnx/fonnx.dart';
 
 class OnnxIsolateMessage {
   final SendPort replyPort;
@@ -39,9 +41,19 @@ class OnnxIsolateManager {
   SendPort? _sendPort;
   Isolate? _isolate;
   Future<void>? _starting;
+  Fonnx? _fonnx; // For Android/iOS method channel usage
+  OnnxIsolateType? _type; // Track the type for Android/iOS method channel selection
 
   // Start the isolate and store its SendPort.
+  // On Android/iOS, this is a no-op since we use method channels instead.
   Future<void> start(OnnxIsolateType type) async {
+    _type = type; // Store type for later use
+    // On Android/iOS, use method channels instead of isolates
+    if (Platform.isAndroid || Platform.isIOS) {
+      _fonnx = Fonnx();
+      return; // No isolate needed on these platforms
+    }
+    
     if (_starting != null) {
       await _starting; // Wait for the pending start to finish.
       return;
@@ -74,12 +86,44 @@ class OnnxIsolateManager {
   }
 
   // Send data to the isolate and get a result.
+  // On Android/iOS, uses method channels instead of isolates.
   Future<Float32List> sendInference(
     String modelPath,
     List<int> tokens, {
     String? ortDylibPathOverride,
     String? outputName, // Optional: specify model output name (e.g., 'embeddings', 'sentence_embedding', 'last_hidden_state')
   }) async {
+    // On Android/iOS, use method channels instead of isolates
+    if (Platform.isAndroid || Platform.isIOS) {
+      // Ensure Fonnx instance is initialized (should have been done in start())
+      final fonnx = _fonnx ??= Fonnx();
+      // Use the appropriate method based on isolate type
+      // Default to miniLm if type is not set (shouldn't happen, but be safe)
+      // Note: outputName is ignored on Android/iOS as method channels don't support it
+      // The native implementation should handle the correct output name
+      final result = (_type == OnnxIsolateType.minishLab)
+          ? await fonnx.minishLab(
+              modelPath: modelPath,
+              inputs: tokens,
+            )
+          : await fonnx.miniLm(
+              modelPath: modelPath,
+              inputs: tokens,
+            );
+      if (result == null) {
+        throw Exception('Embeddings returned from platform code are null');
+      }
+      return result;
+    }
+    
+    // On desktop platforms, ensure isolate is started
+    if (_sendPort == null) {
+      throw StateError(
+        'OnnxIsolateManager not started. Call start() before sendInference().'
+      );
+    }
+    
+    // On desktop platforms, use the isolate
     final response = ReceivePort();
     final message = OnnxIsolateMessage(
       replyPort: response.sendPort,
@@ -121,6 +165,15 @@ void ortMiniLmIsolateEntryPoint(SendPort mainSendPort) {
   receivePort.listen((dynamic message) async {
     if (message is OnnxIsolateMessage) {
       try {
+        // On Android/iOS, the isolate should not be used - use platform channels instead
+        // This check prevents FFI errors on Android
+        if (Platform.isAndroid || Platform.isIOS) {
+          throw Exception(
+            'Android and iOS run using platform-specific implementations via method channels, not FFI isolates. '
+            'Use Fonnx().miniLm() instead of OnnxIsolateManager on these platforms.'
+          );
+        }
+        
         // Set the global constant because its a different global on the
         // isolate.
         if (message.ortDylibPathOverride != null) {
@@ -261,6 +314,15 @@ void ortMinishLabIsolateEntryPoint(SendPort mainSendPort) {
   receivePort.listen((dynamic message) async {
     if (message is OnnxIsolateMessage) {
       try {
+        // On Android/iOS, the isolate should not be used - use platform channels instead
+        // This check prevents FFI errors on Android
+        if (Platform.isAndroid || Platform.isIOS) {
+          throw Exception(
+            'Android and iOS run using platform-specific implementations via method channels, not FFI isolates. '
+            'Use Fonnx().minishLab() instead of OnnxIsolateManager on these platforms.'
+          );
+        }
+        
         // Set the global constant because its a different global on the
         // isolate.
         if (message.ortDylibPathOverride != null) {
